@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Field Log — Property Inspection Dictation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14171A;
+    --panel:#1E2226;
+    --panel-raised:#252A2F;
+    --paper:#F5F3EE;
+    --amber:#F5A623;
+    --amber-dim:#8a6416;
+    --green:#3ECF8E;
+    --red:#E5484D;
+    --text:#EDEEF0;
+    --text-muted:#8A9199;
+    --hairline:#33383E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .app{max-width:520px;margin:0 auto;padding:0 0 48px;}
+
+  /* Header */
+  .header{
+    padding:20px 18px 16px;
+    border-bottom:1px solid var(--hairline);
+    position:sticky;top:0;background:var(--ink);z-index:20;
+  }
+  .brand{
+    display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;
+  }
+  .brand h1{
+    font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;letter-spacing:0.04em;
+    text-transform:uppercase;margin:0;color:var(--text);
+  }
+  .brand h1 span{color:var(--amber);}
+  .status-pill{
+    display:flex;align-items:center;gap:6px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.05em;
+    padding:5px 10px;border-radius:20px;background:var(--panel-raised);
+    text-transform:uppercase;color:var(--text-muted);border:1px solid var(--hairline);
+  }
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex:none;}
+  .status-pill.live{color:var(--green);border-color:rgba(62,207,142,0.3);}
+  .status-pill.live .status-dot{background:var(--green);box-shadow:0 0 0 0 rgba(62,207,142,0.6);animation:pulse 1.6s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(62,207,142,0.5);}
+    70%{box-shadow:0 0 0 8px rgba(62,207,142,0);}
+    100%{box-shadow:0 0 0 0 rgba(62,207,142,0);}
+  }
+  .field-row{display:flex;gap:8px;}
+  .field{flex:1;}
+  .field label{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;
+    color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;
+  }
+  .field input{
+    width:100%;background:var(--panel);border:1px solid var(--hairline);color:var(--text);
+    padding:9px 10px;border-radius:6px;font-size:14px;font-family:'Inter',sans-serif;
+  }
+  .field input:focus{outline:none;border-color:var(--amber);}
+  .field.small{max-width:110px;}
+  .room-row{margin-top:12px;}
+  .room-row label{
+    display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;
+    color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;
+  }
+  .room-controls{display:flex;gap:8px;}
+  .room-indicator{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;
+    background:var(--panel);border:1px solid var(--amber-dim);color:var(--amber);
+    padding:9px 12px;border-radius:6px;font-family:'Oswald',sans-serif;font-size:14px;
+    letter-spacing:0.02em;text-transform:uppercase;
+  }
+  .room-indicator-edit{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:0.05em;
+  }
+
+  /* Camera stage */
+  .stage{
+    margin:16px 18px 0;border-radius:10px;overflow:hidden;position:relative;
+    background:#000;aspect-ratio:4/3;border:1px solid var(--hairline);
+  }
+  .stage video{width:100%;height:100%;object-fit:cover;display:block;}
+  .stage-empty{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;color:var(--text-muted);padding:24px;text-align:center;
+  }
+  .stage-empty svg{opacity:0.5;}
+  .stage-empty p{font-size:13px;margin:0;line-height:1.5;}
+  .capture-flash{
+    position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
+  }
+  .capture-flash.flash{animation:flash 320ms ease-out;}
+  @keyframes flash{0%{opacity:0.85;}100%{opacity:0;}}
+  .trigger-banner{
+    position:absolute;bottom:0;left:0;right:0;padding:8px 12px;
+    background:linear-gradient(transparent,rgba(0,0,0,0.75) 40%);
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:#fff;
+    display:flex;align-items:center;gap:6px;
+  }
+  .trigger-banner b{color:var(--amber);font-weight:600;}
+
+  /* Transcript strip */
+  .transcript{
+    margin:10px 18px 0;min-height:44px;padding:10px 12px;background:var(--panel);
+    border:1px solid var(--hairline);border-radius:8px;font-size:13px;line-height:1.5;
+    color:var(--text-muted);
+  }
+  .transcript .interim{color:var(--text);}
+  .transcript .placeholder{font-style:italic;opacity:0.7;}
+
+  /* Controls */
+  .controls{display:flex;gap:10px;margin:14px 18px 0;}
+  .btn{
+    flex:1;padding:13px 14px;border-radius:8px;border:none;font-family:'Oswald',sans-serif;
+    font-size:14px;font-weight:600;letter-spacing:0.03em;text-transform:uppercase;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;transition:transform 0.1s ease, opacity 0.15s;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-primary{background:var(--amber);color:#241a05;}
+  .btn-stop{background:var(--red);color:#fff;}
+  .btn-ghost{background:var(--panel-raised);color:var(--text);border:1px solid var(--hairline);flex:0 0 auto;width:52px;}
+
+  /* Section label */
+  .section-label{
+    margin:26px 18px 10px;display:flex;align-items:baseline;justify-content:space-between;
+  }
+  .section-label h2{
+    font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;
+    color:var(--text-muted);margin:0;font-weight:600;
+  }
+  .section-label .count{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);
+  }
+
+  /* Tickets */
+  .tickets{margin:0 18px;display:flex;flex-direction:column;gap:12px;}
+  .ticket{
+    display:flex;background:var(--panel);border:1px solid var(--hairline);border-radius:8px;overflow:hidden;
+  }
+  .ticket-stub{
+    flex:0 0 34px;background:var(--panel-raised);border-right:1px dashed var(--hairline);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);writing-mode:vertical-rl;
+    letter-spacing:0.05em;
+  }
+  .ticket-photo{flex:0 0 96px;position:relative;background:#000;cursor:zoom-in;}
+  .ticket-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .ticket-body{flex:1;padding:10px 12px;min-width:0;}
+  .ticket-meta{
+    display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:8px;
+  }
+  .ticket-room{
+    background:var(--panel-raised);border:1px solid var(--amber-dim);color:var(--amber);
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.03em;
+    padding:3px 7px;border-radius:5px;text-transform:uppercase;
+  }
+  .ticket-room:focus{outline:none;}
+  .ticket-note{
+    width:100%;background:transparent;border:none;color:var(--text);font-family:'Inter',sans-serif;
+    font-size:13px;line-height:1.45;resize:vertical;min-height:36px;padding:0;
+  }
+  .ticket-note:focus{outline:none;}
+  .ticket-note::placeholder{color:var(--text-muted);font-style:italic;}
+  .ticket-actions{display:flex;justify-content:flex-end;margin-top:4px;}
+  .ticket-del{
+    background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;letter-spacing:0.04em;text-transform:uppercase;padding:2px 4px;
+  }
+  .ticket-del:hover{color:var(--red);}
+
+  .empty-state{
+    margin:0 18px;padding:28px 18px;text-align:center;color:var(--text-muted);
+    border:1px dashed var(--hairline);border-radius:8px;font-size:13px;line-height:1.6;
+  }
+
+  /* Footer / export */
+  .export-bar{
+    margin:24px 18px 0;padding-top:18px;border-top:1px solid var(--hairline);
+  }
+  .btn-export{
+    width:100%;padding:16px;background:var(--paper);color:var(--ink);border:none;border-radius:8px;
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.04em;text-transform:uppercase;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
+  }
+  .btn-export:disabled{opacity:0.35;cursor:not-allowed;}
+  .export-hint{
+    text-align:center;font-size:11.5px;color:var(--text-muted);margin-top:8px;font-family:'IBM Plex Mono',monospace;
+  }
+
+  /* Zoom overlay */
+  .zoom-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;display:none;
+    align-items:center;justify-content:center;padding:20px;
+  }
+  .zoom-overlay.open{display:flex;}
+  .zoom-overlay img{max-width:100%;max-height:100%;border-radius:6px;}
+
+  ::-webkit-scrollbar{width:0;height:0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="brand">
+      <h1>Field <span>Log</span></h1>
+      <div class="status-pill" id="statusPill"><span class="status-dot"></span><span id="statusText">Idle</span></div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="propAddress">Property</label>
+        <input id="propAddress" type="text" placeholder="123 Maple Ave, Cleveland, OH">
+      </div>
+    </div>
+    <div class="room-row">
+      <label>Current Room</label>
+      <div class="room-indicator" id="roomIndicator" title="Tap to set manually">
+        <span id="roomIndicatorValue">Unspecified</span>
+        <span class="room-indicator-edit">edit</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="stage-empty" id="stageEmpty">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <p>Start a session to open the camera and begin listening for<br><b style="color:var(--amber)">"take photo"</b> and <b style="color:var(--amber)">"new room [name]"</b></p>
+    </div>
+    <div class="capture-flash" id="flash"></div>
+    <div class="trigger-banner" id="triggerBanner" style="display:none;">Say <b>"take photo"</b> to capture, or <b>"new room [name]"</b> to switch rooms</div>
+  </div>
+
+  <div class="transcript" id="transcript"><span class="placeholder">Live transcript will appear here once listening starts&hellip;</span></div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="startBtn">Start Session</button>
+    <button class="btn btn-stop" id="stopBtn" style="display:none;">End Session</button>
+    <button class="btn btn-ghost" id="manualBtn" title="Manual capture" disabled>📷</button>
+  </div>
+
+  <div class="section-label">
+    <h2>Captured Entries</h2>
+    <span class="count" id="entryCount">0</span>
+  </div>
+
+  <div id="entriesWrap">
+    <div class="empty-state" id="emptyEntries">No photos captured yet. Walk the unit, describe what you see, then say <b style="color:var(--amber)">"take photo"</b> to log it.</div>
+    <div class="tickets" id="tickets"></div>
+  </div>
+
+  <div class="export-bar">
+    <button class="btn-export" id="exportBtn" disabled>Generate PDF Report</button>
+    <div class="export-hint" id="exportHint">Capture at least one entry to enable export</div>
+  </div>
+
+</div>
+
+<div class="zoom-overlay" id="zoomOverlay"><img id="zoomImg" src=""></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(function(){
+
+  const video = document.getElementById('video');
+  const stageEmpty = document.getElementById('stageEmpty');
+  const flash = document.getElementById('flash');
+  const triggerBanner = document.getElementById('triggerBanner');
+  const transcriptEl = document.getElementById('transcript');
+  const statusPill = document.getElementById('statusPill');
+  const statusText = document.getElementById('statusText');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const manualBtn = document.getElementById('manualBtn');
+  const ticketsEl = document.getElementById('tickets');
+  const emptyEntries = document.getElementById('emptyEntries');
+  const entryCount = document.getElementById('entryCount');
+  const exportBtn = document.getElementById('exportBtn');
+  const exportHint = document.getElementById('exportHint');
+  const zoomOverlay = document.getElementById('zoomOverlay');
+  const zoomImg = document.getElementById('zoomImg');
+  const propAddressEl = document.getElementById('propAddress');
+  const roomIndicator = document.getElementById('roomIndicator');
+  const roomIndicatorValue = document.getElementById('roomIndicatorValue');
+
+  const ROOM_OPTIONS = ['Kitchen','Bathroom','Bedroom','Living Room','Basement','Exterior','Garage','Utility / Laundry'];
+  const TAKE_TRIGGERS = ['take photo','take a photo'];
+
+  let stream = null;
+  let recognition = null;
+  let recognizing = false;
+  let noteBuffer = "";
+  let entries = [];
+  let entrySeq = 0;
+  let currentRoom = 'Unspecified';
+
+  function updateRoomIndicator(){
+    roomIndicatorValue.textContent = currentRoom;
+  }
+  roomIndicator.addEventListener('click', () => {
+    const name = prompt('Set current room:', currentRoom);
+    if(name && name.trim()){
+      currentRoom = titleCase(name.trim());
+      updateRoomIndicator();
+    }
+  });
+  updateRoomIndicator();
+
+  function setStatus(mode, label){
+    statusText.textContent = label;
+    statusPill.classList.toggle('live', mode === 'live');
+  }
+
+  function updateExportState(){
+    const has = entries.length > 0;
+    exportBtn.disabled = !has;
+    exportHint.textContent = has ? entries.length + ' entr' + (entries.length===1?'y':'ies') + ' ready to export' : 'Capture at least one entry to enable export';
+  }
+
+  // ---------- Camera ----------
+  async function startCamera(){
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width:{ideal:1280}, height:{ideal:960} },
+        audio: false
+      });
+      video.srcObject = stream;
+      stageEmpty.style.display = 'none';
+      triggerBanner.style.display = 'flex';
+      manualBtn.disabled = false;
+      return true;
+    }catch(err){
+      stageEmpty.innerHTML = '<p style="color:var(--red)">Camera access was blocked or unavailable.<br>Check permissions and reload.</p>';
+      return false;
+    }
+  }
+
+  function stopCamera(){
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    video.srcObject = null;
+    stageEmpty.style.display = 'flex';
+    stageEmpty.innerHTML = '<p>Session ended. Start a new session to resume.</p>';
+    triggerBanner.style.display = 'none';
+    manualBtn.disabled = true;
+  }
+
+  // ---------- Speech recognition ----------
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function startRecognition(){
+    if(!SpeechRecognitionImpl){
+      transcriptEl.innerHTML = '<span class="placeholder" style="color:var(--red)">Voice recognition isn\'t supported in this browser. Use the manual capture button instead — you can type notes on each entry afterward.</span>';
+      return;
+    }
+    recognition = new SpeechRecognitionImpl();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const res = event.results[i];
+        const text = res[0].transcript;
+        if(res.isFinal){
+          processFinalChunk(text);
+        } else {
+          interim += text;
+        }
+      }
+      renderTranscript(interim);
+    };
+
+    recognition.onend = () => {
+      if(recognizing){
+        try{ recognition.start(); }catch(e){ /* already starting */ }
+      }
+    };
+
+    recognition.onerror = (e) => {
+      if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+        setStatus('idle','Mic blocked');
+        recognizing = false;
+      }
+      // 'no-speech' and similar are transient — onend will restart it
+    };
+
+    recognizing = true;
+    try{ recognition.start(); }catch(e){}
+    setStatus('live','Listening');
+  }
+
+  function stopRecognition(){
+    recognizing = false;
+    if(recognition){ try{ recognition.stop(); }catch(e){} }
+    setStatus('idle','Idle');
+  }
+
+  function titleCase(s){
+    return s.split(/\s+/).map(w => w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w).join(' ');
+  }
+
+  function normWord(w){
+    return w.toLowerCase().replace(/[^\w']/g, '');
+  }
+
+  // Mobile Chrome speech recognition frequently re-fires growing/overlapping
+  // "final" results for the same utterance. This merges a new chunk into the
+  // buffer by trimming whatever prefix overlap already exists, instead of
+  // blindly concatenating (which caused the "please please please see..." bug).
+  function mergeOverlap(buffer, incoming){
+    const bufWords = buffer.trim() ? buffer.trim().split(/\s+/) : [];
+    const incWords = incoming.trim() ? incoming.trim().split(/\s+/) : [];
+    if(!incWords.length) return buffer;
+    const maxK = Math.min(bufWords.length, incWords.length);
+    let overlap = 0;
+    for(let k = maxK; k > 0; k--){
+      const tail = bufWords.slice(bufWords.length - k).map(normWord).join(' ');
+      const head = incWords.slice(0, k).map(normWord).join(' ');
+      if(tail === head && tail.length){ overlap = k; break; }
+    }
+    const newWords = incWords.slice(overlap);
+    if(!newWords.length) return buffer;
+    return buffer ? (buffer + ' ' + newWords.join(' ')) : newWords.join(' ');
+  }
+
+  function collapseRepeats(text){
+    // collapse immediately-repeated words ("please please please" -> "please")
+    let out = text.replace(/\b([a-z']+)(\s+\1\b)+/gi, '$1');
+    // tidy stray duplicate punctuation left behind by dictation pauses
+    out = out.replace(/(,\s*)+,/g, ',').replace(/\s+,/g, ',').replace(/,(?!\s|$)/g, ', ');
+    return out.trim();
+  }
+
+  function processFinalChunk(text){
+    const clean = text.trim();
+    if(!clean) return;
+    noteBuffer = mergeOverlap(noteBuffer, clean);
+    noteBuffer = collapseRepeats(noteBuffer);
+    processPendingTriggers();
+  }
+
+  // Repeatedly scans the accumulated buffer for whichever trigger phrase
+  // occurs earliest — "take photo" or "new room [name]" — so a trigger split
+  // across two separate recognition results still gets caught once merged.
+  function processPendingTriggers(){
+    let changed = true;
+    while(changed){
+      changed = false;
+      const lower = noteBuffer.toLowerCase();
+
+      let bestIdx = -1, bestLen = 0, bestType = null;
+      TAKE_TRIGGERS.forEach(t => {
+        const i = lower.indexOf(t);
+        if(i !== -1 && (bestIdx === -1 || i < bestIdx)){ bestIdx = i; bestLen = t.length; bestType = 'take'; }
+      });
+      const roomMatch = lower.match(/\bnew room\b/);
+      if(roomMatch && (bestIdx === -1 || roomMatch.index < bestIdx)){
+        bestIdx = roomMatch.index; bestLen = roomMatch[0].length; bestType = 'room';
+      }
+
+      if(bestIdx === -1) break;
+
+      const before = noteBuffer.slice(0, bestIdx).trim();
+      const after = noteBuffer.slice(bestIdx + bestLen).trim();
+
+      if(bestType === 'take'){
+        capturePhoto(before);
+        noteBuffer = after;
+        changed = true;
+      } else if(bestType === 'room'){
+        const words = after.split(/\s+/).filter(Boolean);
+        const roomWords = [];
+        for(let i = 0; i < Math.min(3, words.length); i++){
+          const remainder = words.slice(i).join(' ').toLowerCase();
+          if(TAKE_TRIGGERS.some(t => remainder.startsWith(t))) break;
+          roomWords.push(words[i]);
+        }
+        const roomName = roomWords.join(' ').replace(/[,.]$/, '').trim();
+        if(roomName){
+          currentRoom = titleCase(roomName);
+          updateRoomIndicator();
+        }
+        const remainderAfterRoom = words.slice(roomWords.length).join(' ').trim();
+        noteBuffer = (before ? before + ' ' : '') + remainderAfterRoom;
+        noteBuffer = noteBuffer.trim();
+        changed = true;
+      }
+    }
+  }
+
+  function renderTranscript(interim){
+    const base = noteBuffer ? escapeHtml(noteBuffer) : '';
+    const int = interim ? '<span class="interim"> ' + escapeHtml(interim) + '</span>' : '';
+    if(!base && !int){
+      transcriptEl.innerHTML = '<span class="placeholder">Listening for notes, "take photo", and "new room [name]"&hellip;</span>';
+    } else {
+      transcriptEl.innerHTML = base + int;
+    }
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ---------- Capture ----------
+  function capturePhoto(note){
+    if(!stream){ return; }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 960;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    flash.classList.remove('flash'); void flash.offsetWidth; flash.classList.add('flash');
+
+    entrySeq += 1;
+    const entry = {
+      id: entrySeq,
+      photo: dataUrl,
+      note: note || "",
+      room: currentRoom || 'Unspecified',
+      _w: canvas.width,
+      _h: canvas.height
+    };
+    entries.push(entry);
+    renderEntries();
+    renderTranscript('');
+  }
+
+  manualBtn.addEventListener('click', () => capturePhoto(noteBuffer.trim()));
+
+  // ---------- Entries UI ----------
+  function renderEntries(){
+    emptyEntries.style.display = entries.length ? 'none' : 'block';
+    entryCount.textContent = entries.length;
+    ticketsEl.innerHTML = '';
+    entries.forEach((entry, i) => {
+      const ticket = document.createElement('div');
+      ticket.className = 'ticket';
+      const roomOptionsHtml = ROOM_OPTIONS.map(r =>
+        `<option value="${escapeHtml(r)}"${entry.room===r?' selected':''}>${escapeHtml(r)}</option>`
+      ).join('');
+      const customSelected = !ROOM_OPTIONS.includes(entry.room);
+      ticket.innerHTML = `
+        <div class="ticket-stub">${String(i+1).padStart(2,'0')}</div>
+        <div class="ticket-photo" data-idx="${i}"><img src="${entry.photo}" alt="Capture ${i+1}"></div>
+        <div class="ticket-body">
+          <div class="ticket-meta">
+            <select class="ticket-room" data-idx="${i}">
+              ${roomOptionsHtml}
+              <option value="__custom__"${customSelected?' selected':''}>${customSelected ? escapeHtml(entry.room) : 'Other…'}</option>
+            </select>
+          </div>
+          <textarea class="ticket-note" data-idx="${i}" placeholder="No note captured — tap to type one">${escapeHtml(entry.note)}</textarea>
+          <div class="ticket-actions">
+            <button class="ticket-del" data-idx="${i}">Remove</button>
+          </div>
+        </div>
+      `;
+      ticketsEl.appendChild(ticket);
+    });
+
+    ticketsEl.querySelectorAll('.ticket-note').forEach(el => {
+      el.addEventListener('input', (e) => {
+        entries[+e.target.dataset.idx].note = e.target.value;
+      });
+    });
+    ticketsEl.querySelectorAll('.ticket-room').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const idx = +e.target.dataset.idx;
+        if(e.target.value === '__custom__'){
+          const name = prompt('Room name:', entries[idx].room) || entries[idx].room;
+          entries[idx].room = name.trim() || 'Other';
+          renderEntries();
+        } else {
+          entries[idx].room = e.target.value;
+        }
+      });
+    });
+    ticketsEl.querySelectorAll('.ticket-del').forEach(el => {
+      el.addEventListener('click', (e) => {
+        entries.splice(+e.target.dataset.idx, 1);
+        renderEntries();
+        updateExportState();
+      });
+    });
+    ticketsEl.querySelectorAll('.ticket-photo').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const idx = +e.currentTarget.dataset.idx;
+        zoomImg.src = entries[idx].photo;
+        zoomOverlay.classList.add('open');
+      });
+    });
+
+    updateExportState();
+  }
+
+  zoomOverlay.addEventListener('click', () => zoomOverlay.classList.remove('open'));
+
+  // ---------- Session control ----------
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    const ok = await startCamera();
+    if(ok){
+      startRecognition();
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'flex';
+    }
+    startBtn.disabled = false;
+  });
+
+  stopBtn.addEventListener('click', () => {
+    stopRecognition();
+    stopCamera();
+    stopBtn.style.display = 'none';
+    startBtn.style.display = 'flex';
+    setStatus('idle','Idle');
+  });
+
+  // ---------- PDF export ----------
+  exportBtn.addEventListener('click', () => {
+    if(!entries.length) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'letter' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 40;
+
+    const address = propAddressEl.value.trim() || 'Address not specified';
+
+    // Group entries by room, preserving the order each room first appears in
+    const roomOrder = [];
+    const grouped = {};
+    entries.forEach(entry => {
+      const room = entry.room || 'Unspecified';
+      if(!grouped[room]){ grouped[room] = []; roomOrder.push(room); }
+      grouped[room].push(entry);
+    });
+
+    // Assign a single global item number per entry, shared between the
+    // summary list and the photo detail pages so they cross-reference.
+    const numMap = new Map();
+    let n = 0;
+    roomOrder.forEach(room => { grouped[room].forEach(entry => { n += 1; numMap.set(entry, n); }); });
+
+    // ---- Cover header ----
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(18);
+    doc.setTextColor(0,0,0);
+    doc.text('Maintenance Report', margin, 56);
+    doc.setDrawColor(230,230,230);
+    doc.line(margin, 68, pageW - margin, 68);
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(90,90,90);
+    doc.text('Property', margin, 90);
+    doc.text('Total Entries', pageW/2, 90);
+    doc.setFontSize(12.5);
+    doc.setTextColor(20,20,20);
+    doc.setFont('helvetica','bold');
+    doc.text(address, margin, 105);
+    doc.text(String(entries.length), pageW/2, 105);
+
+    let y = 140;
+
+    // ---- Summary section: line items only, no photos ----
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    doc.setTextColor(20,20,20);
+    doc.text('Summary', margin, y);
+    y += 20;
+
+    const contentW = pageW - margin*2;
+
+    roomOrder.forEach(room => {
+      const roomEntries = grouped[room];
+      if(y + 30 > pageH - margin){ doc.addPage(); y = margin; }
+
+      doc.setFillColor(30,34,38);
+      doc.rect(margin, y, contentW, 22, 'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(245,166,35);
+      doc.text(room.toUpperCase(), margin + 8, y + 15);
+      y += 22 + 10;
+
+      roomEntries.forEach(entry => {
+        const itemNum = numMap.get(entry);
+        const noteText = entry.note && entry.note.trim() ? entry.note.trim() : '(No note recorded)';
+        const label = 'Item ' + String(itemNum).padStart(2,'0') + '  —  ' + noteText;
+        const lines = doc.splitTextToSize(label, contentW - 10);
+        const blockH = lines.length * 12 + 6;
+        if(y + blockH > pageH - margin){ doc.addPage(); y = margin; }
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(40,40,40);
+        doc.text(lines, margin + 6, y + 9);
+        y += blockH;
+      });
+      y += 10;
+    });
+
+    // ---- Photo detail section: 4 photos per page, in quarters, grouped by room ----
+    const gutter = 14;
+    const bannerH = 24;
+
+    roomOrder.forEach(room => {
+      const roomEntries = grouped[room];
+      let i = 0;
+      while(i < roomEntries.length){
+        doc.addPage();
+
+        doc.setFillColor(30,34,38);
+        doc.rect(margin, margin, contentW, bannerH, 'F');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(11);
+        doc.setTextColor(245,166,35);
+        doc.text(room.toUpperCase() + ' — PHOTO DETAIL', margin + 8, margin + 16);
+
+        const gridTop = margin + bannerH + 12;
+        const cellW = (contentW - gutter) / 2;
+        const cellH = (pageH - margin - gridTop - gutter) / 2;
+        const captionH = 32;
+
+        for(let q = 0; q < 4 && i < roomEntries.length; q++, i++){
+          const entry = roomEntries[i];
+          const col = q % 2, row = Math.floor(q / 2);
+          const cellX = margin + col * (cellW + gutter);
+          const cellY = gridTop + row * (cellH + gutter);
+
+          let ratio = (entry._w && entry._h) ? entry._h / entry._w : 0.75;
+          const maxImgH = cellH - captionH;
+          let imgW = cellW, imgH = imgW * ratio;
+          if(imgH > maxImgH){ imgH = maxImgH; imgW = imgH / ratio; }
+          const imgX = cellX + (cellW - imgW) / 2;
+
+          try{ doc.addImage(entry.photo, 'JPEG', imgX, cellY, imgW, imgH); }catch(e){}
+
+          const capY = cellY + maxImgH + 13;
+          doc.setFont('helvetica','bold');
+          doc.setFontSize(9);
+          doc.setTextColor(20,20,20);
+          doc.text('Item ' + String(numMap.get(entry)).padStart(2,'0'), cellX, capY);
+
+          doc.setFont('helvetica','normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(70,70,70);
+          const noteText = entry.note && entry.note.trim() ? entry.note.trim() : '(No note recorded)';
+          const lines = doc.splitTextToSize(noteText, cellW).slice(0, 2);
+          doc.text(lines, cellX, capY + 10);
+        }
+      }
+    });
+
+    const fname = 'maintenance-report-' + Date.now() + '.pdf';
+    doc.save(fname);
+  });
+
+  renderEntries();
+  updateExportState();
+  setStatus('idle','Idle');
+})();
+</script>
+</body>
+</html>
