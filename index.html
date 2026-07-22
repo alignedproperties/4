@@ -174,7 +174,7 @@
   .ticket-photo img{width:100%;height:100%;object-fit:cover;display:block;}
   .ticket-body{flex:1;padding:10px 12px;min-width:0;}
   .ticket-meta{
-    display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:8px;
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px;flex-wrap:wrap;
   }
   .ticket-room{
     background:var(--panel-raised);border:1px solid var(--amber-dim);color:var(--amber);
@@ -182,6 +182,16 @@
     padding:3px 7px;border-radius:5px;text-transform:uppercase;
   }
   .ticket-room:focus{outline:none;}
+  .ticket-estimate{
+    display:flex;align-items:center;gap:3px;background:var(--panel-raised);
+    border:1px solid var(--hairline);border-radius:5px;padding:3px 6px;
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-muted);white-space:nowrap;
+  }
+  .ticket-estimate-input{
+    width:52px;background:transparent;border:none;color:var(--text);
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;padding:0;
+  }
+  .ticket-estimate-input:focus{outline:none;}
   .ticket-note{
     width:100%;background:transparent;border:none;color:var(--text);font-family:'Inter',sans-serif;
     font-size:13px;line-height:1.45;resize:vertical;min-height:36px;padding:0;
@@ -259,10 +269,10 @@
     <video id="video" autoplay playsinline muted></video>
     <div class="stage-empty" id="stageEmpty">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <p>Start a session to open the camera and begin listening for<br><b style="color:var(--amber)">"take photo"</b>, <b style="color:var(--amber)">"new room [name]"</b>, and <b style="color:var(--amber)">"scratch that"</b></p>
+      <p>Start a session to open the camera and begin listening for<br><b style="color:var(--amber)">"take photo"</b>, <b style="color:var(--amber)">"new room [name]"</b>, <b style="color:var(--amber)">"estimate [price]"</b>, and <b style="color:var(--amber)">"scratch that"</b></p>
     </div>
     <div class="capture-flash" id="flash"></div>
-    <div class="trigger-banner" id="triggerBanner" style="display:none;">"take photo" to capture · "new room [name]" to switch · "scratch that" to undo the note</div>
+    <div class="trigger-banner" id="triggerBanner" style="display:none;">"take photo" to capture · "new room [name]" to switch · "estimate [price]" to add a cost · "scratch that" to undo the note</div>
   </div>
 
   <div class="transcript" id="transcript"><span class="placeholder">Live transcript will appear here once listening starts&hellip;</span></div>
@@ -340,6 +350,7 @@
   let entries = [];
   let entrySeq = 0;
   let currentRoom = 'Unspecified';
+  let pendingEstimate = null;
   let wakeLock = null;
   let hasUnsavedChanges = false;
 
@@ -573,6 +584,10 @@
       if(scratchMatch && (bestIdx === -1 || scratchMatch.index < bestIdx)){
         bestIdx = scratchMatch.index; bestLen = scratchMatch[0].length; bestType = 'scratch';
       }
+      const estimateMatch = lower.match(/\bestimate\b/);
+      if(estimateMatch && (bestIdx === -1 || estimateMatch.index < bestIdx)){
+        bestIdx = estimateMatch.index; bestLen = estimateMatch[0].length; bestType = 'estimate';
+      }
 
       if(bestIdx === -1) break;
 
@@ -585,10 +600,28 @@
         changed = true;
       } else if(bestType === 'scratch'){
         // Discard everything said so far for the note in progress (both
-        // the text before the trigger and the trigger phrase itself).
+        // the text before the trigger and the trigger phrase itself), plus
+        // any estimate already mentioned for it.
         noteBuffer = after;
+        pendingEstimate = null;
         changed = true;
         flashClear();
+      } else if(bestType === 'estimate'){
+        // Parse a price immediately following "estimate", e.g.
+        // "estimate 250", "estimate $250", "estimate 250 dollars".
+        const m = after.match(/^\$?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:dollars?|bucks)?/i);
+        let consumed = 0;
+        if(m){
+          const amount = parseFloat(m[1].replace(/,/g, ''));
+          if(!isNaN(amount)){
+            pendingEstimate = amount;
+            consumed = m[0].length;
+          }
+        }
+        const remainderAfterEstimate = after.slice(consumed).trim();
+        noteBuffer = (before ? before + ' ' : '') + remainderAfterEstimate;
+        noteBuffer = noteBuffer.trim();
+        changed = true;
       } else if(bestType === 'room'){
         const words = after.split(/\s+/).filter(Boolean);
         const roomWords = [];
@@ -618,7 +651,7 @@
     const base = noteBuffer ? escapeHtml(noteBuffer) : '';
     const int = interim ? '<span class="interim"> ' + escapeHtml(interim) + '</span>' : '';
     if(!base && !int){
-      transcriptEl.innerHTML = '<span class="placeholder">Listening for notes, "take photo", "new room [name]", and "scratch that"&hellip;</span>';
+      transcriptEl.innerHTML = '<span class="placeholder">Listening for notes, "take photo", "new room [name]", "estimate [price]", and "scratch that"&hellip;</span>';
     } else {
       transcriptEl.innerHTML = base + int;
     }
@@ -646,9 +679,11 @@
       photo: dataUrl,
       note: note || "",
       room: currentRoom || 'Unspecified',
+      estimate: pendingEstimate,
       _w: canvas.width,
       _h: canvas.height
     };
+    pendingEstimate = null;
     entries.push(entry);
     renderEntries();
     renderTranscript('');
@@ -709,6 +744,11 @@
               ${roomOptionsHtml}
               <option value="__custom__"${customSelected?' selected':''}>${customSelected ? escapeHtml(entry.room) : 'Other…'}</option>
             </select>
+            <div class="ticket-estimate">
+              <span>Est. $</span>
+              <input class="ticket-estimate-input" data-idx="${i}" type="number" step="0.01" min="0"
+                placeholder="0.00" value="${typeof entry.estimate === 'number' && !isNaN(entry.estimate) ? entry.estimate : ''}">
+            </div>
           </div>
           <textarea class="ticket-note" data-idx="${i}" placeholder="No note captured — tap to type one">${escapeHtml(entry.note)}</textarea>
           <div class="ticket-actions">
@@ -722,6 +762,14 @@
     ticketsEl.querySelectorAll('.ticket-note').forEach(el => {
       el.addEventListener('input', (e) => {
         entries[+e.target.dataset.idx].note = e.target.value;
+        persistSession();
+      });
+    });
+    ticketsEl.querySelectorAll('.ticket-estimate-input').forEach(el => {
+      el.addEventListener('input', (e) => {
+        const idx = +e.target.dataset.idx;
+        const val = parseFloat(e.target.value);
+        entries[idx].estimate = (e.target.value.trim() === '' || isNaN(val)) ? null : val;
         persistSession();
       });
     });
@@ -927,7 +975,9 @@
       roomEntries.forEach(entry => {
         const itemNum = numMap.get(entry);
         const noteText = entry.note && entry.note.trim() ? entry.note.trim() : '(No note recorded)';
-        const label = 'Item ' + String(itemNum).padStart(2,'0') + ' — ' + noteText;
+        const hasEstimate = typeof entry.estimate === 'number' && !isNaN(entry.estimate);
+        const estText = hasEstimate ? '  (Est. $' + entry.estimate.toFixed(2) + ')' : '';
+        const label = 'Item ' + String(itemNum).padStart(2,'0') + ' — ' + noteText + estText;
         const lines = doc.splitTextToSize(label, contentW - 10);
         const blockH = lines.length * 9.5 + 2;
         if(y + blockH > pageH - margin){ doc.addPage(); y = margin; }
@@ -939,6 +989,25 @@
       });
       y += 10;
     });
+
+    // ---- Total estimated cost across all line items ----
+    const totalEstimate = reportEntries.reduce((sum, e) =>
+      sum + (typeof e.estimate === 'number' && !isNaN(e.estimate) ? e.estimate : 0), 0);
+    const anyEstimates = reportEntries.some(e => typeof e.estimate === 'number' && !isNaN(e.estimate));
+    if(anyEstimates){
+      const totalBlockH = 30;
+      if(y + totalBlockH > pageH - margin){ doc.addPage(); y = margin; }
+      y += 4;
+      doc.setDrawColor(0,0,0);
+      doc.line(pageW - margin - 200, y, pageW - margin, y);
+      y += 16;
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(11);
+      doc.setTextColor(0,0,0);
+      doc.text('Total Estimated Cost:', pageW - margin - 200, y);
+      doc.text('$' + totalEstimate.toFixed(2), pageW - margin, y, { align: 'right' });
+      y += 20;
+    }
 
     // ---- Photo detail section: 4 photos per page, in quarters, grouped by room ----
     const gutter = 14;
